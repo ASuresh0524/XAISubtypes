@@ -6,150 +6,55 @@ git branch -M main
 git remote add origin https://github.com/ASuresh0524/FIUPaper.git
 git push -u origin main
 import xgboost as xgb
-from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV, cross_validate
-import matplotlib.pylab as pl
-import pandas as pd
-import numpy as np
-import sklearn.metrics as metrics
-import matplotlib.pyplot as plt
-
-from sklearn.model_selection import train_test_split
-import xgboost
-import shap
-import numpy as np
-import matplotlib.pylab as pl
-import pandas as pd
-from sklearn.preprocessing import LabelBinarizer
-
+!pip install shap
 import pandas as pd
 import pickle
 from tqdm import tqdm
-
-
-import statistics 
-import math## you may need to do some preprocessing of the input file; do that accordingly
-### format of the file: row index should be samples, column index should be the genes; last column should be the target/class
-import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
 
-# print the JS visualization code to the notebook
-shap.initjs()
-# reading dataframe consisting breast cancer subtype gene expression file
-df = pd.read_csv("Location of the file")
-df
-import pandas as pd
-from sklearn.model_selection import StratifiedKFold
+# Set the location of the file
+file_location = "Location of the file"
+
+# Read the dataframe consisting of breast cancer subtype gene expression
+df = pd.read_csv(file_location)
+
+# Define the target column name
+target_column = "rename_targetClassNameHere"
+
+# Split the data into train and test sets using StratifiedKFold
 skf = StratifiedKFold(n_splits=5)
-df['rename_targetClassNameHere'].unique().tolist()
+target = df[target_column]
 
 fold_no = 1
 for train_index, test_index in skf.split(df, target):
-    train = df.loc[train_index,:]
-    test = df.loc[test_index,:]
+    train = df.loc[train_index, :]
+    test = df.loc[test_index, :]
     train_filename = 'train_split_' + str(fold_no) + '.csv'
     test_filename = 'test_split_' + str(fold_no) + '.csv'
     train.to_csv(train_filename, index=False)
     test.to_csv(test_filename, index=False)
     fold_no += 1
-    
-    #### XGBoost Classifiers
-    # dropping the samples that did not predict correctly
+
+# Define a function to drop falsely predicted samples by the model
 def drop_false_pred(df):
-    #df = df[df.predicted_label == df.true_label].copy()
     df = df[df.predicted_label.astype(int) == df.true_label.astype(int)].copy()
-    df.drop(["predicted_label","true_label"], axis=1, inplace=True),
+    df.drop("predicted_label", axis=1, inplace=True)
     return df
-    model_dir= ""
 
-for i in tqdm(range(1,6)):
-    newdftrain= pd.read_csv("train_split_"+str(i)+".csv")
-    newdftrain.index= newdftrain["Unnamed: 0"]
-    newdftrain=newdftrain.drop(["Unnamed: 0"], axis="columns")
-    newdftest= pd.read_csv("test_split_"+str(i)+".csv")
-    newdftest.index= newdftest["Unnamed: 0"]
-    newdftest=newdftest.drop(["Unnamed: 0"], axis="columns")
-    X_train, y_train= newdftrain.iloc[:, 0:19648], newdftrain['label'].values 
-    X_test, y_test= newdftest.iloc[:, 0:19648], newdftest['label'].values 
-    print(X_train.shape, y_train.shape)
-    print(X_test.shape, y_test.shape)
-                           
-    # xgboost definition
-    xgbc = xgb.XGBClassifier(learning_rate=0.5,
-                    n_estimators=150,
-                    max_depth=6,
-                    min_child_weight=0,
-                    gamma=0,
-                    reg_lambda=1,
-                    subsample=1,
-                    colsample_bytree=0.75,
-                    scale_pos_weight=1,
-                    objective='multi:softprob',
-                    num_class=3,
-                    random_state=0)
-    #fitting model
-    mcl = xgbc.fit(X_train, y_train, eval_metric='mlogloss')
-    # save to JSON
-    mcl.save_model(model_dir+f"fold_"+ str(i)+"_model_topology.json")
-    # prediction output
-    pred = mcl.predict(X_test)
-    # probability of predicted output
-    proba = mcl.predict_proba(X_test)
-                           
-    #store labels for results
-    y_map = pd.DataFrame(data=y_test, columns=['class'])
-    y_map['pred']= pred
-    y_map['true_label'] = y_map['class'].map({'healthy': 0,'luad': 1,'lusc':2})
-    y_map['pred_label'] = y_map['pred'].map({'healthy': 0,'luad': 1,'lusc':2})
-    y_map.index= X_test.index
-    #y_map.to_csv("true_predicted_label_test_"+str(i)+".csv")
-    
-    # adding true and predicted label to X_test
-    X_test['true_label']= y_map['true_label']
-    X_test['predicted_label']= y_map['pred_label']
-    
-    # drop false prediction
-    X_test=drop_false_pred(X_test)
-    X_test.to_csv("AfterDroppingFalsePrediction_test_"+str(i)+".csv")
-    
-    # new y_map
-    y_map_new= y_map[y_map.index.isin(X_test.index.tolist())]
-    y_map_new.to_csv("true_predicted_label_test_"+str(i)+".csv")
-    
-    # SHAP calculation
-## change the name according to the class and values accordingly
-map_dict = {
-    "healthy":0,
-    "luad": 1,
-    "lusc":2   
-}
-# filtering samlples based on true predicted label
-# now each sample will have the shap value of only one class (truly predicted class)
-
+# Define a function to filter samples based on the true predicted label for calculating SHAP values
 def filter_shap(test_data, shap_arr, y_map_new):
     df_data = []
-#     ids_list = X_test.index.to_list()
-#     genes_list = X_test.columns.tolist()
     ids_list = test_data.index.to_list()
     genes_list = test_data.columns.tolist()
-    genes_list= genes_list[0:19648]
-    
+    genes_list = genes_list[0:19648]
+
     for i in tqdm(range(shap_arr.shape[0])):
         sample = shap_arr[i]
-        #print(sample)
         sample_id = ids_list[i]
-        #print(sample_id)
-        #print(y_pred[i])
-        #label = inv_map[y_pred[i]]
         label = y_map_new['pred'][i]
-        label= map_dict[label]
-        print(label)
-#         _, w, h = sample.shape
-        w, h = sample.shape
-        #print(w,h)
-        #print(sample[6])
+        label = map_dict[label]
+
         shap_scores_flat = sample[label][: len(genes_list)]
-        #shap_scores_flat = np.reshape(sample[6], (w * h,))[: len(genes_list)]
 
         df_data.append([sample_id, *list(shap_scores_flat), label])
 
@@ -159,147 +64,119 @@ def filter_shap(test_data, shap_arr, y_map_new):
 
     shap_df.set_index("id", inplace=True)
     shap_df["true_label"] = list(y_map_new['true_label'])
-#     shap_df["predicted_label"] = shap_df["predicted_label"].astype("int").map(map_dict)
-    #shap_df["predicted_label"] = shap_df["predicted_label"].map(map_dict)
 
     return shap_df
-    # drop falsely predicted samples by the model
-def drop_false_pred(df):
-    #df = df[df.predicted_label == df.true_label].copy()
-    df = df[df.predicted_label.astype(int) == df.true_label.astype(int)].copy()
-    df.drop("predicted_label", axis=1, inplace=True),
-    return df
 
-# get the ranking of genes for each class based on SHAP values
+# Define a function to get the ranking of genes for each class based on SHAP values
 def get_rank_df(df):
     df = drop_false_pred(df)
     shap_df = df.loc[:, df.columns != "true_label"].astype("float64")
-    #print(shap_df.shape)
-    shap_df["true_label"] = df["true_label"]
-    
-    #taking the average that describes average cohort impact
-    median_shap = shap_df.groupby("true_label").median() 
+
+    median_shap = shap_df.groupby("true_label").median()
     median_shap = median_shap.T
-    #print(median_shap)
 
     rank_dict = {}
     for col in median_shap:
-        #print(col)
         sorted_df = median_shap.sort_values(by=col, ascending=False)
-        #print(sorted_df)
         rank_dict[col] = sorted_df.index
     rank_df = pd.DataFrame.from_dict(rank_dict)
-    #print(rank_df)
+
     return rank_df
-    import matplotlib.pyplot as plt
 
-model_dir= ""
-output_dir= ""
+model_dir = ""
+output_dir = ""
 
-for i in range(1,6):
-    
-    # loading truly predicted test file
-    newdftest= pd.read_csv(output_dir+"AfterDroppingFalsePrediction_test_"+str(i)+".csv")
-    newdftest.index= newdftest["Unnamed: 0"]
-    newdftest=newdftest.drop(["Unnamed: 0"], axis="columns")
-    X_test= newdftest.copy() 
-    print(X_test.shape)
-    
-    # loading truly predicted y_map
-    y_map_new= pd.read_csv("true_predicted_label_test_"+str(i)+".csv")
-    y_map_new.index= y_map_new["Unnamed: 0"]
-    y_map_new=y_map_new.drop(["Unnamed: 0"], axis='columns')
-    print(y_map_new.shape)
-    
-    # loading saved model
+for i in range(1, 6):
+    # Load the truly predicted test file
+    newdftest = pd.read_csv(output_dir + "AfterDroppingFalsePrediction_test_" + str(i) + ".csv")
+    newdftest.index = newdftest["Unnamed: 0"]
+    newdftest = newdftest.drop(["Unnamed: 0"], axis="columns")
+    X_test = newdftest.copy()
+
+    # Load the truly predicted y_map
+    y_map_new = pd.read_csv("true_predicted_label_test_" + str(i) + ".csv")
+    y_map_new.index = y_map_new["Unnamed: 0"]
+    y_map_new = y_map_new.drop(["Unnamed: 0"], axis='columns')
+
+    # Load the saved model
     mcl = xgb.XGBRFClassifier()
-    mcl.load_model(model_dir+f"fold_"+ str(i)+"_model_topology.json")
-    
-    # tree explainer; mcl is the model of xgboost
+    mcl.load_model(model_dir + "fold_" + str(i) + "_model_topology.json")
+
+    # Tree explainer; mcl is the model of xgboost
     explainer = shap.TreeExplainer(mcl)
-    
-    # calculating shap value
+
+    # Calculating SHAP values
     out_list = []
     num_samples = np.shape(X_test)[0]
-    for sample in tqdm(range(0,(num_samples))):
-        # shap
+    for sample in tqdm(range(0, num_samples)):
         shap_values = explainer.shap_values(X_test[sample : sample + 1])
         out_list.append(shap_values)
-        
-    # squeezed; this the shap value for the test data
+
     shap_arr = np.squeeze(np.array(out_list))
-    print(shap_arr.shape) # n sample, 3 output for 3 classes; 19648 features; each sample has 3 class of shap values
-    
-#     shap_df = filter_shap(X_test, shap_arr, pred, y_map_new)
-    #shap_df = filter_shap(test_data, shap_arr, an_array)
+
     shap_df = filter_shap(X_test, shap_arr, y_map_new)
-    
-    # store shap value
-    output_file = output_dir+f"treeExplainer_shap_scores_allGenes_test_"+str(i)+".pkl"
+
+    # Store SHAP values
+    output_file = output_dir + "treeExplainer_shap_scores_allGenes_test_" + str(i) + ".pkl"
     pickle.dump(shap_df, open(str(output_file), "wb"))
-    
-    # class specific gene ranking 
+
+    # Class-specific gene ranking
     rank_df = get_rank_df(shap_df)
-    rank_df.columns= ["healthy", "luad","lusc"]
-    rank_df.to_csv(output_dir+"class_specific_gene_rank_test_"+str(i)+".csv")
-    
-    shap.summary_plot(explainer.shap_values(X_test), X_test, plot_type="bar", class_names= rank_df.columns, feature_names = X_test.columns, show=False)
-    plt.savefig(output_dir+"global_interpretation_top_gene_rank_test_"+str(i)+".png")
+    rank_df.columns = ["healthy", "luad", "lusc"]
+    rank_df.to_csv(output_dir + "class_specific_gene_rank_test_" + str(i) + ".csv")
+
+    shap.summary_plot(explainer.shap_values(X_test), X_test, plot_type="bar", class_names=rank_df.columns, feature_names=X_test.columns, show=False)
+    plt.savefig(output_dir + "global_interpretation_top_gene_rank_test_" + str(i) + ".png")
     plt.clf()
-    
-    # summary plot specific class healthy
-    shap.summary_plot(shap.TreeExplainer(mcl).shap_values(X_test)[0], X_test.values, feature_names = X_test.columns, show=False)
-    plt.savefig(output_dir+"class_specific_healthy_interpretation_top_gene_rank_test_"+str(i)+".png")
+
+    # Summary plot specific class healthy
+    shap.summary_plot(shap.TreeExplainer(mcl).shap_values(X_test)[0], X_test.values, feature_names=X_test.columns, show=False)
+    plt.savefig(output_dir + "class_specific_healthy_interpretation_top_gene_rank_test_" + str(i) + ".png")
     plt.clf()
-    
-    # summary plot specific class luad
-    shap.summary_plot(shap.TreeExplainer(mcl).shap_values(X_test)[1], X_test.values, feature_names = X_test.columns, show=False)
-    plt.savefig(output_dir+"class_specific_luad_interpretation_top_gene_rank_test_"+str(i)+".png")
+
+    # Summary plot specific class luad
+    shap.summary_plot(shap.TreeExplainer(mcl).shap_values(X_test)[1], X_test.values, feature_names=X_test.columns, show=False)
+    plt.savefig(output_dir + "class_specific_luad_interpretation_top_gene_rank_test_" + str(i) + ".png")
     plt.clf()
-    
-    # summary plot specific class lusc
-    shap.summary_plot(shap.TreeExplainer(mcl).shap_values(X_test)[2], X_test.values, feature_names = X_test.columns, show=False)
-    plt.savefig(output_dir+"class_specific_lusc_interpretation_top_gene_rank_test_"+str(i)+".png")
+
+    # Summary plot specific class lusc
+    shap.summary_plot(shap.TreeExplainer(mcl).shap_values(X_test)[2], X_test.values, feature_names=X_test.columns, show=False)
+    plt.savefig(output_dir + "class_specific_lusc_interpretation_top_gene_rank_test_" + str(i) + ".png")
     plt.clf()
-    
-    # Patient Specific Genes
-    for j in range(1,6):
-    with open("treeExplainer_shap_scores_allGenes_test_"+str(j)+".pkl", "rb") as f:
+
+# Patient Specific Genes
+for j in range(1, 6):
+    with open("treeExplainer_shap_scores_allGenes_test_" + str(j) + ".pkl", "rb") as f:
         shap_scores = pickle.load(f)
-    features_shap_df= shap_scores.drop(['predicted_label','true_label'], axis="columns")
-    features_shap_df
-    
-    genelist=[]
+    features_shap_df = shap_scores.drop(['predicted_label', 'true_label'], axis="columns")
 
-    for i in range(0,features_shap_df.shape[0]):
-        s= pd.DataFrame(features_shap_df.iloc[i])
-        s= s.sort_values(by=features_shap_df.index[i], ascending=False)
+    genelist = []
+    for i in range(0, features_shap_df.shape[0]):
+        s = pd.DataFrame(features_shap_df.iloc[i])
+        s = s.sort_values(by=features_shap_df.index[i], ascending=False)
         genelist.append(s.index.tolist())
-        
-    patientSpecificGenes= pd.DataFrame(genelist)
-    patientSpecificGenes.index= features_shap_df.index
-    patientSpecificGenes['true_label']= shap_df['true_label']
-    patientSpecificGenes.to_csv("Patient_specific_genes_xgboost_treeExplainer_test_"+str(j)+".csv")
-    
-    #Forming Single Dataframe for patient specific genes
-    import pandas as pd
-output_dir= ""
-df=pd.DataFrame()
-for i in tqdm(range(1,6)):
-    df_1=pd.read_csv(output_dir+"Patient_specific_genes_xgboost_treeExplainer_test_"+str(i)+".csv")
-    df= pd.concat([df,df_1], axis=0)
-    df 
-    
-    y_map_all=pd.DataFrame()
-for i in range(1,6):
-    ymap=pd.read_csv(output_dir+"true_predicted_label_test_"+str(i)+".csv")
-    y_map_all= pd.concat([y_map_all,ymap], axis=0) 
-    
-    y_map_all.index=y_map_all["Unnamed: 0"]
-new_y_map_all=y_map_all.drop("Unnamed: 0", axis="columns")
-new_y_map_all=new_y_map_all[['class']]
-new_y_map_all
 
-patientSpecificGenes= pd.merge(df, new_y_map_all, left_on="id", right_on=new_y_map_all.index)
-patientSpecificGenes= patientSpecificGenes.drop("true_label", axis="columns")
-patientSpecificGenes 
+    patientSpecificGenes = pd.DataFrame(genelist)
+    patientSpecificGenes.index = features_shap_df.index
+    patientSpecificGenes['true_label'] = shap_df['true_label']
+    patientSpecificGenes.to_csv("Patient_specific_genes_xgboost_treeExplainer_test_" + str(j) + ".csv")
+
+# Forming Single Dataframe for patient specific genes
+output_dir = ""
+df = pd.DataFrame()
+for i in tqdm(range(1, 6)):
+    df_1 = pd.read_csv(output_dir + "Patient_specific_genes_xgboost_treeExplainer_test_" + str(i) + ".csv")
+    df = pd.concat([df, df_1], axis=0)
+
+y_map_all = pd.DataFrame()
+for i in range(1, 6):
+    ymap = pd.read_csv(output_dir + "true_predicted_label_test_" + str(i) + ".csv")
+    y_map_all = pd.concat([y_map_all, ymap], axis=0)
+
+y_map_all.index = y_map_all["Unnamed: 0"]
+new_y_map_all = y_map_all.drop("Unnamed: 0", axis="columns")
+new_y_map_all = new_y_map_all[['class']]
+
+patientSpecificGenes = pd.merge(df, new_y_map_all, left_on="id", right_on=new_y_map_all.index)
+patientSpecificGenes = patientSpecificGenes.drop("true_label", axis="columns")
+patientSpecificGenes
