@@ -12,8 +12,8 @@ import pickle
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-# Set the location of the file
-file_location = "Location of the file"
+# Set the location of the file (not provided due to patient security) 
+file_location = "Location of the file" 
 
 # Read the dataframe consisting of breast cancer subtype gene expression
 df = pd.read_csv(file_location)
