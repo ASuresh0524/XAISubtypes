@@ -1,12 +1,4 @@
-echo "# FIUPaper" >> README.md
-git init
-git add README.md
-git commit -m "first commit"
-git branch -M main
-git remote add origin https://github.com/ASuresh0524/FIUPaper.git
-git push -u origin main
 import xgboost as xgb
-!pip install shap
 import pandas as pd
 import pickle
 from tqdm import tqdm
