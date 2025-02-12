@@ -4,14 +4,11 @@ import pickle
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-# Set the location of the file (not provided due to patient security) 
-file_location = "Location of the file" 
-
 # Read the dataframe consisting of breast cancer subtype gene expression
-df = pd.read_csv(file_location)
+df = pd.read_csv(fiu_pickle) #Dependent on hospital data 
 
 # Define the target column name
-target_column = "rename_targetClassNameHere"
+target_column = "Breast_Cancer_Subtype" 
 
 # Split the data into train and test sets using StratifiedKFold
 skf = StratifiedKFold(n_splits=5)
